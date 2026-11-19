@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
@@ -464,6 +465,43 @@ test("supplier lifecycle: pending approval, isolated product, fulfilment and set
     await call("supplier/dashboard", "GET", undefined, sellerCookie)
   ).json();
   const pid = inventory.products[0].id;
+  const photoBytes = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: "green" },
+  })
+    .png()
+    .toBuffer();
+  const updated = await call(
+    "supplier/products/" + pid,
+    "PATCH",
+    {
+      name: "Updated headphones",
+      description: "Detailed updated listing",
+      photo: photoBytes.toString("base64"),
+    },
+    sellerCookie,
+  );
+  assert.equal(updated.status, 200);
+  const published = await call("photos/" + pid);
+  assert.equal(published.headers.get("content-type"), "image/webp");
+  assert.equal(
+    (await sharp(Buffer.from(await published.arrayBuffer())).metadata()).format,
+    "webp",
+  );
+  const rejected = await call(
+    "supplier/products/" + pid,
+    "PATCH",
+    { name: "Bad photo edit", photo: "YWJj" },
+    sellerCookie,
+  );
+  assert.equal(rejected.status, 400);
+  const saved = (
+    await (
+      await call("supplier/dashboard", "GET", undefined, sellerCookie)
+    ).json()
+  ).products[0];
+  assert.equal(saved.name, "Updated headphones");
+  assert.equal(saved.stock, 3);
+  assert.match(saved.image, /^\/api\/photos\//);
   const o = await createOrder(
     user,
     [{ productId: pid, quantity: 1 }],

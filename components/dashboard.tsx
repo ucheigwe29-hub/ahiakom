@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
+import { readProductPhoto } from "./product-photo";
 import { api, money } from "@/lib/client";
 import {
   ArrowRight,
@@ -153,17 +154,28 @@ export default function Dashboard({
                 <h2>Add a product</h2>
                 <form
                   className="grid-form"
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     const d = values(e);
-                    action("supplier/products", {
-                      products: [
-                        {
-                          ...d,
-                          cost_kobo: Math.round(Number(d.cost) * 100),
-                          stock: Number(d.stock),
-                        },
-                      ],
-                    });
+                    try {
+                      const file = new FormData(e.currentTarget).get(
+                        "photo",
+                      ) as File;
+                      const photo = file?.size
+                        ? await readProductPhoto(file)
+                        : undefined;
+                      await action("supplier/products", {
+                        products: [
+                          {
+                            ...d,
+                            photo,
+                            cost_kobo: Math.round(Number(d.cost) * 100),
+                            stock: Number(d.stock),
+                          },
+                        ],
+                      });
+                    } catch (err: any) {
+                      setError(err.message);
+                    }
                   }}
                 >
                   <label>
@@ -220,7 +232,15 @@ export default function Dashboard({
                     <textarea name="description" minLength={10} required />
                   </label>
                   <label>
-                    Demonstration illustration
+                    Product photo (optional)
+                    <input
+                      type="file"
+                      name="photo"
+                      accept="image/jpeg,image/png,image/webp"
+                    />
+                  </label>
+                  <label>
+                    Illustration if no photo is uploaded
                     <select name="image">
                       {[
                         "bag",
@@ -308,20 +328,73 @@ export default function Dashboard({
                   data.products.map((p: any) => (
                     <form
                       key={p.id}
-                      className="inventory-row"
-                      onSubmit={(e) => {
+                      className="grid-form"
+                      onSubmit={async (e) => {
                         const d = values(e);
-                        action(
-                          "supplier/products/" + p.id,
-                          {
-                            stock: Number(d.stock),
-                            cost_kobo: Math.round(Number(d.cost) * 100),
-                          },
-                          "PATCH",
-                        );
+                        try {
+                          const file = new FormData(e.currentTarget).get(
+                            "photo",
+                          ) as File;
+                          const photo = file?.size
+                            ? await readProductPhoto(file)
+                            : undefined;
+                          await action(
+                            "supplier/products/" + p.id,
+                            {
+                              name: d.name,
+                              description: d.description,
+                              category_id: d.category_id,
+                              photo,
+                              stock:
+                                Number(d.stock) === Number(p.stock)
+                                  ? undefined
+                                  : Number(d.stock),
+                              cost_kobo: Math.round(Number(d.cost) * 100),
+                            },
+                            "PATCH",
+                          );
+                        } catch (err: any) {
+                          setError(err.message);
+                        }
                       }}
                     >
-                      <strong>{p.name}</strong>
+                      <strong>Edit product</strong>
+                      <label>
+                        Product name
+                        <input
+                          name="name"
+                          required
+                          minLength={3}
+                          defaultValue={p.name}
+                        />
+                      </label>
+                      <label>
+                        Description
+                        <textarea
+                          name="description"
+                          required
+                          minLength={10}
+                          defaultValue={p.description}
+                        />
+                      </label>
+                      <label>
+                        Category
+                        <select name="category_id" defaultValue={p.category_id}>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Product photo (optional)
+                        <input
+                          type="file"
+                          name="photo"
+                          accept="image/jpeg,image/png,image/webp"
+                        />
+                      </label>
                       <label>
                         Stock
                         <input
@@ -498,7 +571,7 @@ export default function Dashboard({
               </p>
               {data.suppliers.map((s: any) => (
                 <form
-                  className="inventory-row"
+                  className="grid-form"
                   key={s.id}
                   onSubmit={(e) => {
                     const d = values(e);

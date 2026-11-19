@@ -20,7 +20,7 @@
 
 ## Explicitly simulated
 
-All catalogue stock/prices/sellers are demonstration data. Payment simulation, supplier connector dispatch and settlement records move no money and create no external shipment. Seeded sellers are fictional. Shipping is a flat test estimate. The catalogue uses illustrations, not real product photography.
+All catalogue stock/prices/sellers are demonstration data. Payment simulation, supplier connector dispatch and settlement records move no money and create no external shipment. Seeded sellers are fictional. Shipping is a flat test estimate. Seeded listings use illustrations. Approved sellers can upload a product photo and edit their own listings. The pilot stores compressed WebP images in PostgreSQL.
 
 ## Implemented adapters not externally verified
 

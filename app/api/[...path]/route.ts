@@ -4,6 +4,7 @@ import {
   simulateSettlement,
   financeReport,
 } from "@/lib/operations";
+import { saveProductPhoto } from "@/lib/product-photo";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { database, audit } from "@/lib/db";
@@ -48,7 +49,14 @@ const addressSchema = z.object({
   city: z.string().trim().min(2).max(100),
   state: z.string().trim().min(2).max(100),
 });
+const photo = z
+  .string()
+  .min(4)
+  .max(180000)
+  .regex(/^[A-Za-z0-9+/]+=*$/)
+  .optional();
 const productSchema = z.object({
+  photo,
   group_key: z.string().max(80).default(""),
   variant_label: z.string().max(80).default(""),
   name: z.string().trim().min(3).max(150),
@@ -104,6 +112,18 @@ async function handle(
     const db = await database();
     const url = new URL(req.url);
     const method = req.method;
+    if (method === "GET" && /^photos\/[a-zA-Z0-9-]+$/.test(path)) {
+      const row = (
+        await db.query(
+          "SELECT ph.data FROM product_photos ph JOIN products p ON p.id=ph.product_id JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.active AND s.status='approved'",
+          [path.split("/")[1]],
+        )
+      ).rows[0];
+      if (!row) throw new HttpError(404, "Photo unavailable");
+      return new Response(new Uint8Array(row.data), {
+        headers: { "Content-Type": "image/webp", "Cache-Control": "no-cache" },
+      });
+    }
     if (path === "health")
       return NextResponse.json({
         status: "ok",
@@ -395,11 +415,12 @@ async function handle(
         .max(100)
         .parse(data.products);
       await db.transaction(async (tx) => {
-        for (const p of products)
+        for (const p of products) {
+          const id = crypto.randomUUID();
           await tx.query(
             "INSERT INTO products(id,supplier_id,category_id,name,description,cost_kobo,stock,image,group_key,variant_label) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
             [
-              crypto.randomUUID(),
+              id,
               s.id,
               p.category_id,
               p.name,
@@ -411,6 +432,8 @@ async function handle(
               p.variant_label,
             ],
           );
+          if (p.photo) await saveProductPhoto(tx, id, p.photo);
+        }
         await audit(tx, user.id, "products.created", s.id);
       });
       return NextResponse.json({ count: products.length });
@@ -421,17 +444,30 @@ async function handle(
         throw new HttpError(403, "Supplier approval required");
       const d = z
         .object({
-          stock: z.number().int().min(0).max(100000),
-          cost_kobo: z.number().int().min(100).max(100000000),
+          photo,
+          name: productSchema.shape.name.optional(),
+          description: productSchema.shape.description.optional(),
+          category_id: productSchema.shape.category_id.optional(),
+          stock: z.number().int().min(0).max(100000).optional(),
+          cost_kobo: productSchema.shape.cost_kobo.optional(),
         })
         .parse(await body(req));
       const id = path.split("/")[2];
       await db.transaction(async (tx) => {
         const r = await tx.query(
-          "UPDATE products SET stock=$1,cost_kobo=$2 WHERE id=$3 AND supplier_id=$4 RETURNING id",
-          [d.stock, d.cost_kobo, id, s.id],
+          "UPDATE products SET stock=COALESCE($1,stock),cost_kobo=COALESCE($2,cost_kobo),name=COALESCE($5,name),description=COALESCE($6,description),category_id=COALESCE($7,category_id) WHERE id=$3 AND supplier_id=$4 RETURNING id",
+          [
+            d.stock,
+            d.cost_kobo,
+            id,
+            s.id,
+            d.name,
+            d.description,
+            d.category_id,
+          ],
         );
         if (!r.rows.length) throw new HttpError(404, "Product not found");
+        if (d.photo) await saveProductPhoto(tx, id, d.photo);
         await audit(tx, user.id, "product.updated", id);
       });
       return NextResponse.json({ ok: true });

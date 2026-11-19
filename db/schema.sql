@@ -27,3 +27,5 @@ ALTER TABLE pricing_rules ADD COLUMN IF NOT EXISTS other_cost_kobo INTEGER NOT N
 ALTER TABLE products ADD COLUMN IF NOT EXISTS group_key TEXT NOT NULL DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS variant_label TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS return_requests(id TEXT PRIMARY KEY,order_id TEXT NOT NULL UNIQUE REFERENCES orders(id),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'requested' CHECK(status IN ('requested','approved','received','rejected')),note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS product_photos(product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE, data BYTEA NOT NULL);

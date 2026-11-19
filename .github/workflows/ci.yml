@@ -1,0 +1,43 @@
+name: Ahiakom validation
+on:
+  push:
+  pull_request:
+jobs:
+  local-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ahiakom_test
+          POSTGRES_PASSWORD: ci_disposable_test_password
+          POSTGRES_DB: ahiakom_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ahiakom_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://ahiakom_test:ci_disposable_test_password@localhost:5432/ahiakom_test

@@ -1,0 +1,2 @@
+// Cache only public illustrations. Never cache accounts, API responses or checkout.
+self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method==='GET'&&u.origin===self.location.origin&&u.pathname.startsWith('/products/'))e.respondWith(caches.open('ahiakom-assets-v1').then(async c=>{const hit=await c.match(e.request);if(hit)return hit;const r=await fetch(e.request);if(r.ok)await c.put(e.request,r.clone());return r;}));});
